@@ -295,16 +295,22 @@ let seed=1;
 function jrng(type,r,c){let h=(seed*2654435761^(type*97+r*7919+c*104729))>>>0;return rng(h||1)}
 // segments d'une jointure dans son sens canonique (gauche→droite ou haut→bas), en coordonnées monde
 function joint(type,r,c){const key=type+','+r+','+c;if(jcache.has(key))return jcache.get(key);const R_=jrng(type,r,c);for(let i=0;i<3;i++)R_();
- // forme classique régulière : col étroit + tête ronde (~22 % du côté), légère variation de position/taille
- const s=type?vt[r][c]:hz[r][c],L=type?ph:pw,m=Math.min(pw,ph),u=x=>R_()*2*x-x;
- const a=L*(.5+u(.035)),f=1+u(.05),rad=m*.112*f,hc=m*.175*f,nw=m*.072*f,ph0=35*Math.PI/180;
- const Q=t=>[a+rad*Math.sin(t),hc-rad*Math.cos(t)],D=t=>[-Math.cos(t),-Math.sin(t)];// point et direction de parcours (t décroissant)
- const t1=-ph0,t2=-(2*Math.PI-ph0),P1=Q(t1),P2=Q(t2),e=m*.035,pts=[];
- pts.push([[(a-nw)*.33,0],[(a-nw)*.67,0],[a-nw,0]]);
- pts.push([[a-nw,m*.03],[P1[0]-D(t1)[0]*e,P1[1]-D(t1)[1]*e],P1]);
- const n=4,dt=(t2-t1)/n,k=4/3*Math.tan(Math.abs(dt)/4)*rad;for(let i=0;i<n;i++){const ta=t1+i*dt,tb=ta+dt,A=Q(ta),B=Q(tb),da=D(ta),db=D(tb);pts.push([[A[0]+da[0]*k,A[1]+da[1]*k],[B[0]-db[0]*k,B[1]-db[1]*k],B])}
- pts.push([[P2[0]+D(t2)[0]*e,P2[1]+D(t2)[1]*e],[a+nw,m*.03],[a+nw,0]]);
- pts.push([[a+nw+(L-a-nw)*.33,0],[a+nw+(L-a-nw)*.67,0],[L,0]]);
+ // côté partagé = UNE courbe (deux voisins la parcourent en sens inverse) → emboîtement exact
+ // tenon gros (tête ≈ 30-35 % du côté), col visible, décalé, incliné ; épaules ondulées ou en angle ; quelques têtes atypiques
+ const s=type?vt[r][c]:hz[r][c],L=type?ph:pw,m=Math.min(pw,ph),u=x=>R_()*2*x-x,pick=R_();
+ const a=L*(.5+u(.06)),rad=m*(.15+R_()*.018),odd=R_()<.14,rx=rad*(odd?.82+R_()*.12:.95+R_()*.1),ry=rad*(odd?1.06+R_()*.08:.95+R_()*.1);
+ const nw=m*(.068+R_()*.022),hc=Math.max(ry*.9+m*.06,m*(.185+R_()*.03)),th=u(.16),ph0=Math.asin(Math.min(.9,nw*1.25/rx));
+ const cs=Math.cos(th),sn=Math.sin(th),RT=([x,y])=>[a+(x-a)*cs-y*sn,(x-a)*sn+y*cs];
+ const Q=t=>RT([a+rx*Math.sin(t),hc-ry*Math.cos(t)]),Dl=t=>{const v=[-rx*Math.cos(t),-ry*Math.sin(t)],n=Math.hypot(...v);return[(v[0]*cs-v[1]*sn)/n,(v[0]*sn+v[1]*cs)/n]};
+ const t1=-ph0,t2=-(2*Math.PI-ph0),P1=Q(t1),P2=Q(t2),e=m*.05,pts=[],B1=RT([a-nw,0]),B2=RT([a+nw,0]);
+ // épaule : ondulée (courbe) ou en angle (deux segments droits)
+ const shoulder=(x0,x1,yEnd)=>{const w=pick<.2?0:u(m*.045);if(pick>.82){const k=.35+R_()*.3,kx=x0+(x1-x0)*k,ky=u(m*.05),p=(A,B)=>[[A[0]+(B[0]-A[0])/3,A[1]+(B[1]-A[1])/3],[A[0]+2*(B[0]-A[0])/3,A[1]+2*(B[1]-A[1])/3],B];return[p([x0,0],[kx,ky]),p([kx,ky],[x1,yEnd])]}
+  return[[[x0+(x1-x0)*.33,w],[x0+(x1-x0)*.67,w*.6+u(m*.02)],[x1,yEnd]]]};
+ pts.push(...shoulder(0,B1[0],B1[1]));
+ const D1=Dl(t1),D2=Dl(t2);pts.push([[B1[0]-sn*m*.0,B1[1]+m*.035],[P1[0]-D1[0]*e,P1[1]-D1[1]*e],P1]);
+ const n=4,dt=(t2-t1)/n;for(let i=0;i<n;i++){const ta=t1+i*dt,tb=ta+dt,A=Q(ta),B=Q(tb),da=Dl(ta),db=Dl(tb),k=4/3*Math.tan(Math.abs(dt)/4)*Math.hypot(rx*Math.cos(ta),ry*Math.sin(ta)),k2=4/3*Math.tan(Math.abs(dt)/4)*Math.hypot(rx*Math.cos(tb),ry*Math.sin(tb));pts.push([[A[0]+da[0]*k,A[1]+da[1]*k],[B[0]-db[0]*k2,B[1]-db[1]*k2],B])}
+ pts.push([[P2[0]+D2[0]*e,P2[1]+D2[1]*e],[B2[0],B2[1]+m*.035],B2]);
+ const sh2=shoulder(B2[0],L,0);sh2[0][0]=[B2[0]+(L-B2[0])*.33,B2[1]+(sh2[0][0][1])];pts.push(...sh2);
  const x0=type?(c+1)*pw:c*pw,y0=type?r*ph:(r+1)*ph,T=(p)=>type?[x0-p[1]*s,y0+p[0]]:[x0+p[0],y0+p[1]*s];
  const res={start:[x0,y0],segs:pts.map(sg=>sg.map(T))};jcache.set(key,res);return res}
 const jcache=new Map();
@@ -339,10 +345,10 @@ function recadre(im,c,r){const cell=Math.min(im.width/c,im.height/r),w=Math.roun
 let tray=[],trayX=0,sel=null,selP=null;const TRAYH=()=>W<600?92:112;
 function setup(n,saved){undoS=[];redoS=[];setTimeout(majUR);hint=null;$('rot').style.display=(saved?(saved.rot||[]).some(v=>v):rotOn)?'':'none';$('apercu').style.display=(level||catL)?'none':'';if(!String(imgSrc).startsWith('k:')&&!saved)catL=catL;N=n;const ar=img.width/img.height;
  [C,R]=grille(img.width,img.height,n);N=C*R;img=recadre(img,C,R);
- IW=3000;pw=ph=IW/C;IH=ph*R;tab=Math.min(pw,ph)*.34;jcache.clear();
- const rnd=()=>Math.random()<.5?1:-1;hz=saved?saved.hz:[...Array(R)].map(()=>[...Array(C)].map(rnd));vt=saved?saved.vt:[...Array(R)].map(()=>[...Array(C)].map(rnd));
- seed=saved?(saved.seed||1):(Math.random()*1e9|0);
- P=[];G=new Map();order=[];tray=[];trayX=0;sel=null;const T0=performance.now();
+ IW=3000;pw=ph=IW/C;IH=ph*R;tab=Math.min(pw,ph)*.44;jcache.clear();
+ const lr=level?rng(911+level*7919):Math.random,rnd=()=>lr()<.5?1:-1;hz=saved?saved.hz:[...Array(R)].map(()=>[...Array(C)].map(rnd));vt=saved?saved.vt:[...Array(R)].map(()=>[...Array(C)].map(rnd));
+ seed=saved?(saved.seed||1):level?(level*2654435761>>>0)%1e9+1:(Math.random()*1e9|0);
+ P=[];G=new Map();hitC=null;order=[];tray=[];trayX=0;sel=null;const T0=performance.now();
  for(let r=0;r<R;r++)for(let c=0;c<C;c++){const p={r,c,i:r*C+c,edge:!r||!c||r==R-1||c==C-1};render(p);P.push(p)}
  if(saved){saved.groups.forEach(s=>{const g={id:++gid,dx:s[0],dy:s[1],lock:!!s[2],pcs:s[3].map(i=>P[i])};g.pcs.forEach(p=>p.g=g);G.set(g.id,g);order.push(g)});elapsed=saved.elapsed;
   P.forEach(p=>{if(p.g.lock||p.g.pcs.length>1)render(p)});(saved.rot||[]).forEach((v,i)=>{if(P[i])P[i].rot=v});(saved.tray||[]).forEach(i=>{const g=P[i].g;if(g.pcs.length==1&&!g.lock){g.tray=true;tray.push(g)}})}
@@ -373,7 +379,7 @@ function draw(){frames++;if(physics())dirty=true;const now=performance.now();if(
  ctx.fillStyle='rgba(255,255,255,.07)';ctx.fillRect(0,0,IW,IH);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2/cam.s;ctx.strokeRect(0,0,IW,IH);
  const vx0=cam.x-tab*2,vy0=cam.y-tab*2,vx1=cam.x+W/cam.s+tab,vy1=cam.y+H/cam.s+tab;
  const m0=Math.min(pw,ph),sd=cam.s*DPR;
- const drawP=p=>{const x=p.c*pw+(p.g.dx)-tab,y=p.r*ph+p.g.dy-tab;if(x>vx1||y>vy1||x+p.bw<vx0||y+p.bh<vy0)return;if(p.rot){ctx.save();ctx.translate(x+p.bw/2,y+p.bh/2);ctx.rotate(p.rot*Math.PI/2);ctx.drawImage(p.bmp,-p.bw/2,-p.bh/2,p.bw,p.bh);ctx.restore()}else ctx.drawImage(p.bmp,x,y,p.bw,p.bh)};
+ const now2=performance.now(),drawP=p=>{let x=p.c*pw+(p.g.dx)-tab,y=p.r*ph+p.g.dy-tab;if(p.st){const f=1-(now2-p.st)/160;if(f<=0)p.st=0;else{const e=f*f*f;x+=p.sx*e;y+=p.sy*e;dirty=true}}if(x>vx1||y>vy1||x+p.bw<vx0||y+p.bh<vy0)return;if(p.rot){ctx.save();ctx.translate(x+p.bw/2,y+p.bh/2);ctx.rotate(p.rot*Math.PI/2);ctx.drawImage(p.bmp,-p.bw/2,-p.bh/2,p.bw,p.bh);ctx.restore()}else ctx.drawImage(p.bmp,x,y,p.bw,p.bh)};
  for(const g of order){if(g.tray)continue;if(edgesOnly&&!g.lock&&g.pcs.length==1&&!g.pcs[0].edge)continue;const hl=g===sel,fl=flash&&flash.g===g&&performance.now()<flash.until;
   if(!g.lock){ctx.save();ctx.shadowColor=hl?'rgba(255,205,110,.95)':fl?'rgba(255,240,200,.9)':'rgba(0,0,0,.42)';ctx.shadowBlur=(hl||fl?18*DPR:m0*.06*sd);ctx.shadowOffsetX=ctx.shadowOffsetY=(hl||fl)?0:m0*.022*sd;g.pcs.forEach(drawP);ctx.restore();if(g.pcs.length>1){ctx.save();ctx.shadowColor='rgba(0,0,0,.65)';ctx.shadowBlur=1.6*DPR;g.pcs.forEach(drawP);ctx.restore();g.pcs.forEach(drawP)}}
   else{if(fl){ctx.save();ctx.shadowColor='rgba(255,240,200,.8)';ctx.shadowBlur=22*DPR*(flash.until-performance.now())/500;g.pcs.forEach(drawP);ctx.restore()}else g.pcs.forEach(drawP)}}
@@ -388,26 +394,35 @@ function draw(){frames++;if(physics())dirty=true;const now=performance.now();if(
 // ---------- interactions ----------
 const ptr=new Map();let drag=null,pinch=null;
 const toW=(x,y)=>[x/cam.s+cam.x,y/cam.s+cam.y];
-function hitP(wx,wy){for(let k=order.length-1;k>=0;k--){const g=order[k];if(g.lock||g.tray)continue;if(edgesOnly&&g.pcs.length==1&&!g.pcs[0].edge)continue;
- for(const p of g.pcs){const x=wx-(p.c*pw+g.dx),y=wy-(p.r*ph+g.dy),m=tab*.5;if(x>-m&&y>-m&&x<pw+m&&y<ph+m)return[g,p]}}return null}
+let hitC=null;const hctx=document.createElement('canvas').getContext('2d');
+function hitPath(p){return p.hp||(p.hp=piecePath(p,p.c*pw,p.r*ph))}
+function inPiece(p,g,wx,wy,tol){let x=wx-(p.c*pw+g.dx),y=wy-(p.r*ph+g.dy);if(x<-tab-tol||y<-tab-tol||x>pw+tab+tol||y>ph+tab+tol)return false;
+ if(p.rot){const a=-p.rot*Math.PI/2,dx=x-pw/2,dy=y-ph/2;x=pw/2+dx*Math.cos(a)-dy*Math.sin(a);y=ph/2+dx*Math.sin(a)+dy*Math.cos(a)}
+ const P2=hitPath(p);if(hctx.isPointInPath(P2,x,y))return true;hctx.lineWidth=tol*2;return hctx.isPointInStroke(P2,x,y)}
+// pièce du dessus d'abord ; tolérance ≈ 8 px écran autour de la forme
+function hitP(wx,wy){const tol=Math.min(tab*.6,8/cam.s);for(let k=order.length-1;k>=0;k--){const g=order[k];if(g.lock||g.tray)continue;if(edgesOnly&&g.pcs.length==1&&!g.pcs[0].edge)continue;
+ for(const p of g.pcs)if(inPiece(p,g,wx,wy,0))return[g,p]}
+ for(let k=order.length-1;k>=0;k--){const g=order[k];if(g.lock||g.tray)continue;if(edgesOnly&&g.pcs.length==1&&!g.pcs[0].edge)continue;for(const p of g.pcs)if(inPiece(p,g,wx,wy,tol))return[g,p]}return null}
 function hit(wx,wy){const h=hitP(wx,wy);return h&&h[0]}
 function pos(e){const b=cv.getBoundingClientRect();return[e.clientX-b.left,e.clientY-b.top]}
 function toTop(g){order.splice(order.indexOf(g),1);order.push(g)}
 function placeAt(g,p,wx,wy){fromTray(g);g.dx=wx-(p.c*pw+pw/2);g.dy=wy-(p.r*ph+ph/2);toTop(g)}
 cv.addEventListener('pointerdown',e=>{if(e.button===2)return;cv.setPointerCapture(e.pointerId);const [x,y]=pos(e);ptr.set(e.pointerId,[x,y]);
  if(ptr.size==2){drag=null;const [a,b]=[...ptr.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),m:[(a[0]+b[0])/2,(a[1]+b[1])/2]};return}
- if(y>=H-TRAYH()){const g=done?null:trayHit(x,y);drag={pre:g?snap():null,tray:1,g,x0:x,y0:y,x,y,tx:trayX,moved:false};return}
- zt=null;vel=null;camGo=null;const [wx,wy]=toW(x,y),h=done?null:hitP(wx,wy);if(h){toTop(h[0]);drag={pre:snap(),g:h[0],p:h[1],ox:wx-h[0].dx,oy:wy-h[0].dy,x0:x,y0:y,moved:false}}else drag={pan:1,x,y,x0:x,y0:y,moved:false};dirty=true});
+ if(y>=H-TRAYH()){const g=done?null:trayHit(x,y),s=slot(),i=Math.floor((x+trayX-6)/s.w),sx=6+i*s.w-trayX,sy=H-TRAYH()+8;drag={pre:g?snap():null,tray:1,g,x0:x,y0:y,x,y,tx:trayX,moved:false,bx:(x-sx)/s.k,by:(y-sy)/s.k};return}
+ zt=null;vel=null;camGo=null;const [wx,wy]=toW(x,y),h=done?null:hitP(wx,wy);if(h){toTop(h[0]);const p=h[1];drag={pre:snap(),g:h[0],p,ox:wx-h[0].dx,oy:wy-h[0].dy,x0:x,y0:y,moved:false,odx:h[0].dx,ody:h[0].dy,bx:wx-(p.c*pw-tab+h[0].dx),by:wy-(p.r*ph-tab+h[0].dy)}}else drag={pan:1,x,y,x0:x,y0:y,moved:false};dirty=true});
 cv.addEventListener('pointermove',e=>{if(!ptr.has(e.pointerId))return;const [x,y]=pos(e);ptr.set(e.pointerId,[x,y]);
  if(pinch&&ptr.size==2){const [a,b]=[...ptr.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]),m=[(a[0]+b[0])/2,(a[1]+b[1])/2];zoomAt(pinch.m[0],pinch.m[1],d/pinch.d);cam.x-=(m[0]-pinch.m[0])/cam.s;cam.y-=(m[1]-pinch.m[1])/cam.s;pinch={d,m};dirty=true;return}
- if(!drag)return;if(Math.hypot(x-drag.x0,y-drag.y0)>7)drag.moved=true;if(!drag.moved)return;
+ if(!drag)return;if(Math.hypot(x-drag.x0,y-drag.y0)>7)drag.moved=true;
+ if(drag.g&&!drag.tray){const [wx,wy]=toW(x,y);drag.g.dx=wx-drag.ox;drag.g.dy=wy-drag.oy;dirty=true;return}// la pièce suit le doigt dès le premier pixel
+ if(!drag.moved)return;
  if(drag.tray){// sortir une pièce vers le haut, sinon défiler
   if(drag.g&&drag.mode=='scroll'&&y<H-TRAYH()-8){trayX=drag.tx;drag.mode=null}
-  if(drag.g&&(drag.mode=='out'||(!drag.mode&&(drag.y0-y>Math.abs(x-drag.x0)*.5||y<H-TRAYH()-8)))){if(drag.mode!='out'){drag.mode='out';const g=drag.g,p=g.pcs[0],[wx,wy]=toW(x,y);placeAt(g,p,wx,wy);drag.ox=wx-g.dx;drag.oy=wy-g.dy}
+  if(drag.g&&(drag.mode=='out'||(!drag.mode&&(drag.y0-y>Math.abs(x-drag.x0)*.5||y<H-TRAYH()-8)))){if(drag.mode!='out'){drag.mode='out';const g=drag.g,p=g.pcs[0],[wx,wy]=toW(x,y);placeAt(g,p,wx,wy);g.dx=wx-drag.bx-(p.c*pw-tab);g.dy=wy-drag.by-(p.r*ph-tab);drag.p=p;drag.ox=wx-g.dx;drag.oy=wy-g.dy}
    const [wx,wy]=toW(x,y);drag.g.dx=wx-drag.ox;drag.g.dy=wy-drag.oy}else{drag.mode='scroll';trayX=drag.tx-(x-drag.x0)}dirty=true;return}
  if(drag.pan){cam.x-=(x-drag.x)/cam.s;cam.y-=(y-drag.y)/cam.s;const t=performance.now(),dt=Math.max(1,t-(drag.t||t-16));drag.vx=(x-drag.x)*16/dt;drag.vy=(y-drag.y)*16/dt;drag.t=t;drag.x=x;drag.y=y}else{const [wx,wy]=toW(x,y);drag.g.dx=wx-drag.ox;drag.g.dy=wy-drag.oy}dirty=true});
 function up(e){if(!ptr.has(e.pointerId))return;ptr.delete(e.pointerId);if(ptr.size<2)pinch=null;const d=drag;drag=null;if(!d)return;const [x,y]=pos(e);
- if(!d.moved){// clic / tap : sélection puis dépose
+ if(!d.moved){if(d.g&&!d.tray){d.g.dx=d.odx;d.g.dy=d.ody}// clic / tap : sélection puis dépose
   if(d.tray){sel=(d.g&&d.g!==sel)?d.g:null;dirty=true;return}
   if(d.g){if(d.g===sel)sel=null;else{sel=d.g;selP=d.p}dirty=true;return}
   if(sel&&!done){const pre=snap(),g=sel,p=(!g.tray&&selP&&selP.g===g)?selP:g.pcs[0];const [wx,wy]=toW(x,y);placeAt(g,p,wx,wy);sel=null;selP=null;drop(g);pushUndo(pre);return}
@@ -418,6 +433,7 @@ function up(e){if(!ptr.has(e.pointerId))return;ptr.delete(e.pointerId);if(ptr.si
  if(d.tray)return;
  if(d.g){if(y>=H-TRAYH()&&d.g.pcs.length==1&&!d.g.lock){d.g.tray=true;tray.unshift(d.g);trayX=0;if(sel===d.g)sel=null;dirty=true;save()}else drop(d.g);pushUndo(d.pre)}}
 let lastTap=null;
+window.__dragErr=()=>{if(!drag||!drag.g||drag.g.tray||drag.bx==null)return null;const p=drag.p||drag.g.pcs[0],f=[...ptr.values()][0],X=(p.c*pw-tab+drag.g.dx+drag.bx-cam.x)*cam.s,Y=(p.r*ph-tab+drag.g.dy+drag.by-cam.y)*cam.s;return Math.hypot(X-f[0],Y-f[1])};
 const selG=()=>sel;
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 cv.addEventListener('wheel',e=>{e.preventDefault();const [x,y]=pos(e);if(y>=H-TRAYH()){trayX+=(Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY);dirty=true;return}smoothZoom(x,y,Math.exp(-e.deltaY*.0018))},{passive:false});
@@ -432,10 +448,11 @@ function drop(g){const th=Math.min(pw,ph)*.25;let merged=!(g.pcs.length==1&&g.pc
  while(merged){merged=false;for(const p of g.pcs){for(const [dr,dc] of[[0,1],[1,0],[0,-1],[-1,0]]){const r=p.r+dr,c=p.c+dc;if(r<0||c<0||r>=R||c>=C)continue;const q=P[r*C+c];if(q.g===g||q.g.tray||q.rot)continue;
   if(Math.abs(q.g.dx-g.dx)<th&&Math.abs(q.g.dy-g.dy)<th){g=merge(q.g,g);merged=true;break}}if(merged)break}}
  if(g.pcs.length>n0){flash={g,until:performance.now()+500};anim();snapFx()}
- if(!g.lock&&!(g.pcs.length==1&&g.pcs[0].rot)&&Math.abs(g.dx)<th&&Math.abs(g.dy)<th){flash={g,until:performance.now()+500};anim();if(g.pcs.length===n0)snapFx();g.dx=0;g.dy=0;g.lock=true;g.pcs.forEach(p=>{if(!p.flat)render(p)});order.splice(order.indexOf(g),1);order.unshift(g)}
+ if(!g.lock&&!(g.pcs.length==1&&g.pcs[0].rot)&&Math.abs(g.dx)<th&&Math.abs(g.dy)<th){flash={g,until:performance.now()+500};anim();if(g.pcs.length===n0)snapFx();glide(g.pcs,g.dx,g.dy);g.dx=0;g.dy=0;g.lock=true;g.pcs.forEach(p=>{if(!p.flat)render(p)});order.splice(order.indexOf(g),1);order.unshift(g)}
  if(sel&&sel.lock)sel=null;dirty=true;check();save()}
+function glide(pcs,ox,oy){if(reduceMotion)return;const t=performance.now();pcs.forEach(p=>{const f=p.st?Math.max(0,1-(t-p.st)/160)**3:0;p.sx=(p.sx||0)*f+ox;p.sy=(p.sy||0)*f+oy;p.st=t});dirty=true}
 function merge(a,b){// b rejoint a (a garde sa position)
- b.pcs.forEach(p=>{p.g=a;a.pcs.push(p)});a.pcs.forEach(p=>{if(!p.flat)render(p)});G.delete(b.id);order.splice(order.indexOf(b),1);if(sel===b)sel=a;return a}
+glide(b.pcs,b.dx-a.dx,b.dy-a.dy); b.pcs.forEach(p=>{p.g=a;a.pcs.push(p)});a.pcs.forEach(p=>{if(!p.flat)render(p)});G.delete(b.id);order.splice(order.indexOf(b),1);if(sel===b)sel=a;return a}
 function check(){if(done)return;if(P.every(p=>p.g.lock)){done=true;elapsed=time();running=false;let x='';if(level){if(level>=prog())localStorage.setItem('puzzleProg',Math.min(NIVEAUX.length+1,level+1));x=level<NIVEAUX.length?` Niveau ${level+1} débloqué !`:' Campagne terminée, bravo !'}$('msg').textContent=`Tu as assemblé les ${N} pièces en ${fmt(elapsed)}. Bravo !`+x;recordDone();const gain=Math.max(5,Math.round(N/20));localStorage.setItem('puzzleEclats',eclats()+gain);majEclats();$('msg').textContent+=` +${gain} éclats.`;const rv=level||catL;$('reveal').style.display=rv?'block':'none';if(rv){if(img.__url)$('reveal').src=img.__url;else try{$('reveal').src=img.toDataURL('image/jpeg',.85)}catch(e){}}$('bravo').style.display='flex';addStats();winFx();undoS=[];redoS=[];majUR();save()}}
 window.__toutResoudre=()=>{tray.forEach(g=>g.tray=false);tray=[];sel=null;order.slice().forEach(g=>{g.dx=0;g.dy=0});drop(order[order.length-1]);let g=P[0].g;P.forEach(p=>{if(p.g!==g)g=merge(g,p.g)});g.lock=true;dirty=true;check();save()};
 // bords
