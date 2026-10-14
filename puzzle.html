@@ -458,6 +458,9 @@ function fit(anim,tout){const c0={x:cam.x,y:cam.y,s:cam.s};zt=null;vel=null;let 
 let shelfView=false;const visTray=()=>(edgesOnly||shelfView||tray.some(g=>g.pcs[0].shelf))?tray.filter(g=>!!g.pcs[0].shelf===shelfView&&(!edgesOnly||g.pcs[0].edge)):tray;
 function slot(){const h=TRAYH()-22,k=h/Math.max(pw+2*tab,ph+2*tab);return{k,w:(pw+2*tab)*k+6,h}}
 function trayMax(){const s=slot();return Math.max(0,visTray().length*s.w-W+12)}
+function trayInsert(g,x){// insère à l'endroit du lâcher (entre les deux pièces sous le doigt), sans toucher au défilement
+ const s=slot(),v=visTray().filter(h=>h!==g),k=Math.max(0,Math.min(v.length,Math.round((x+trayX-6)/s.w)));const i=tray.indexOf(g);if(i>=0)tray.splice(i,1);
+ if(k<v.length)tray.splice(tray.indexOf(v[k]),0,g);else if(v.length)tray.splice(tray.indexOf(v[v.length-1])+1,0,g);else tray.unshift(g);window.__trayIns={k,trayX}}
 function trayHit(x,y){if(y<H-TRAYH())return null;const s=slot(),i=Math.floor((x+trayX-6)/s.w),v=visTray();return v[i]||null}
 function fromTray(g){const i=tray.indexOf(g);if(i>=0)tray.splice(i,1);g.tray=false}
 // ---------- dessin ----------
@@ -531,9 +534,9 @@ function up(e){if(!ptr.has(e.pointerId))return;ptr.delete(e.pointerId);if(ptr.si
   // double-tap / double-clic sur la table vide : recentrer
   const now=performance.now();if(lastTap&&now-lastTap.t<350&&Math.hypot(x-lastTap.x,y-lastTap.y)<30){lastTap=null;fit(true,!window.__vueTout)}else lastTap={t:now,x,y};return}
  if(d.pan){if(d.vx!==undefined&&performance.now()-d.t<80&&!reduceMotion)vel={x:d.vx,y:d.vy};return}
- if(d.tray&&d.mode=='out'){if(y>=H-TRAYH()){d.g.tray=true;tray.unshift(d.g);dirty=true;save()}else{dropU(d.g);pushUndo(d.pre)}return}
+ if(d.tray&&d.mode=='out'){if(y>=H-TRAYH()){d.g.tray=true;trayInsert(d.g,x);dirty=true;save()}else{dropU(d.g);pushUndo(d.pre)}return}
  if(d.tray)return;
- if(d.g){if(y>=H-TRAYH()&&d.g.pcs.length==1&&!d.g.lock){d.g.tray=true;d.g.pcs[0].shelf=shelfView;tray.unshift(d.g);trayX=0;if(shelfView)toast('Rangée dans le plateau');if(sel===d.g)sel=null;dirty=true;save()}else if(d.moved)dropU(d.g);pushUndo(d.pre)}}
+ if(d.g){if(y>=H-TRAYH()&&d.g.pcs.length==1&&!d.g.lock){d.g.tray=true;d.g.pcs[0].shelf=shelfView;trayInsert(d.g,x);if(shelfView)toast('Rangée dans le plateau');if(sel===d.g)sel=null;dirty=true;save()}else if(d.moved)dropU(d.g);pushUndo(d.pre)}}
 let lastTap=null;
 window.__dragErr=()=>{if(!drag||!drag.g||drag.g.tray||drag.bx==null)return null;const p=drag.p||drag.g.pcs[0],f=[...ptr.values()][0],X=(p.c*pw-tab+drag.g.dx+drag.bx-cam.x)*cam.s,Y=(p.r*ph-tab+drag.g.dy+drag.by-cam.y)*cam.s;return Math.hypot(X-f[0],Y-f[1])};
 const selG=()=>sel;
