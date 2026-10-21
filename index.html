@@ -142,7 +142,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 <div class="mrow"><svg class="i"><use href="#i-grid"/></svg><span>Pièces (Libre)</span><select id="nb" aria-label="Nombre de pièces en mode Libre"><option value="100">≈ 100</option><option value="500">≈ 500</option><option value="750">≈ 750</option><option value="1000" selected>≈ 1000</option></select></div></div>
 <h3 class="mh">Couleur du fond</h3><div class="ms"><div id="fonds" role="radiogroup" aria-label="Couleur du fond"></div></div>
 <div class="ms"><button class="mi" id="statsBtn"><svg class="i"><use href="#i-stats"/></svg>Statistiques</button><button class="mi" id="restart"><svg class="i"><use href="#i-restart"/></svg>Recommencer</button><button class="mi" id="regles"><svg class="i"><use href="#i-help"/></svg>Règles</button>
-<div class="mrow" id="eclats"></div><div class="mrow" id="versionApp" style="font-size:12px;color:var(--mut);min-height:28px">Morcelune v13</div></div></div><div id="toast"></div>
+<div class="mrow" id="eclats"></div><div class="mrow" id="versionApp" style="font-size:12px;color:var(--mut);min-height:28px">Morcelune v14</div></div></div><div id="toast"></div>
 <button class="ib" id="plateau" title="Plateau de rangement" aria-label="Plateau de rangement : afficher les pièces mises de côté" aria-pressed="false"><svg class="i"><use href="#i-folder"/></svg><b id="platN"></b></button><canvas id="cv" role="application" aria-label="Table de puzzle : glisse les pièces du bandeau vers l'image" tabindex="0"></canvas><canvas id="fx" aria-hidden="true"></canvas><div id="info"></div>
 <div class="modal" id="bravo" role="dialog" aria-modal="true"><div><h2><svg class="i"><use href="#i-spark"/></svg>Puzzle terminé</h2><p id="msg"></p><img id="reveal" alt="Image révélée" style="display:none"><div class="act"><button class="btn pri" id="again">Continuer</button></div></div></div>
 <div class="modal" id="gal" role="dialog" aria-modal="true"><div><h2><svg class="i"><use href="#i-image"/></svg>Galerie</h2><p>Créations originales générées par le jeu, ou tes propres images.</p><div id="thumbs" class="grid"></div><div class="act"><label class="btn"><svg class="i"><use href="#i-upload"/></svg>Charger mes images<input type="file" id="file2" accept="image/*" multiple style="display:none"></label><button class="btn" id="closeGal">Fermer</button></div></div></div>
@@ -233,7 +233,7 @@ function neon(){const w=3000,h=2000,[c,g]=mk(w,h),r=rng(21);let s=g.createLinear
  - pieces : nombre de pièces visé (arrondi à la grille la plus proche)
  - image  : URL de données (data:image/jpeg;base64,...) pour garder le fichier autonome
  Les niveaux se débloquent dans l'ordre du tableau. */
-// v12 (niveau 9) et v13 (niveau 27) : iv = version de l'image d'un niveau ; une partie en cours sauvegardée avec une autre image repart du début (progression, éclats et statistiques gardés)
+// v12 (niveau 9), v13 (niveau 27), v14 (niveaux 12, 15, 17, 21, 24, 26, 28) : iv = version de l'image d'un niveau ; une partie en cours sauvegardée avec une autre image repart du début (progression, éclats et statistiques gardés)
 const ivN=L=>(NIVEAUX[L-1]&&NIVEAUX[L-1].iv)||1,ivOk=st=>!st||!st.level||!/^g\d+$/.test(st.img||'')||(st.iv||1)===ivN(st.level);
 const NIVEAUX=[
  {id:"magie-1",nom:"La tour de l'archimage",pieces:504,grid:[18,28],image:"images/web/magie-1.webp",secours:"images/web/magie-1.jpg"},
@@ -247,23 +247,23 @@ const NIVEAUX=[
  {id:"combat-2",nom:"Combat II",pieces:504,grid:[18,28],iv:2,image:"images/web/combat-2.webp",secours:"images/web/combat-2.jpg"},
  {id:"steampunk-2",nom:"Steampunk II",pieces:504,grid:[18,28],image:"images/web/steampunk-2.webp",secours:"images/web/steampunk-2.jpg"},
  {id:"creatures-2",nom:"Créatures II",pieces:504,grid:[18,28],image:"images/web/creatures-2.webp",secours:"images/web/creatures-2.jpg"},
- {id:"magie-3",nom:"Magie III",pieces:504,grid:[18,28],image:"images/web/magie-3.webp",secours:"images/web/magie-3.jpg"},
+ {id:"magie-3",nom:"Magie III",pieces:504,grid:[18,28],iv:2,image:"images/web/magie-3.webp",secours:"images/web/magie-3.jpg"},
  {id:"gothique-2",nom:"Gothique II",pieces:504,grid:[18,28],image:"images/web/gothique-2.webp",secours:"images/web/gothique-2.jpg"},
  {id:"futuriste-3",nom:"Futuriste III",pieces:504,grid:[18,28],image:"images/web/futuriste-3.webp",secours:"images/web/futuriste-3.jpg"},
- {id:"combat-3",nom:"Combat III",pieces:504,grid:[18,28],image:"images/web/combat-3.webp",secours:"images/web/combat-3.jpg"},
+ {id:"combat-3",nom:"Combat III",pieces:504,grid:[18,28],iv:2,image:"images/web/combat-3.webp",secours:"images/web/combat-3.jpg"},
  {id:"magie-4",nom:"Magie IV",pieces:504,grid:[18,28],image:"images/web/magie-4.webp",secours:"images/web/magie-4.jpg"},
- {id:"creatures-3",nom:"Créatures III",pieces:504,grid:[18,28],image:"images/web/creatures-3.webp",secours:"images/web/creatures-3.jpg"},
+ {id:"creatures-3",nom:"Créatures III",pieces:504,grid:[18,28],iv:2,image:"images/web/creatures-3.webp",secours:"images/web/creatures-3.jpg"},
  {id:"steampunk-3",nom:"Steampunk III",pieces:504,grid:[18,28],image:"images/web/steampunk-3.webp",secours:"images/web/steampunk-3.jpg"},
  {id:"futuriste-4",nom:"Futuriste IV",pieces:504,grid:[18,28],image:"images/web/futuriste-4.webp",secours:"images/web/futuriste-4.jpg"},
  {id:"gothique-3",nom:"Gothique III",pieces:504,grid:[18,28],image:"images/web/gothique-3.webp",secours:"images/web/gothique-3.jpg"},
- {id:"magie-5",nom:"La Cascade céleste",pieces:504,grid:[18,28],image:"images/web/magie-5.webp",secours:"images/web/magie-5.jpg"},
+ {id:"magie-5",nom:"La Cascade céleste",pieces:504,grid:[18,28],iv:2,image:"images/web/magie-5.webp",secours:"images/web/magie-5.jpg"},
  {id:"steampunk-4",nom:"L'Observatoire de cuivre",pieces:504,grid:[18,28],image:"images/web/steampunk-4.webp",secours:"images/web/steampunk-4.jpg"},
  {id:"futuriste-5",nom:"La Tour des deux lunes",pieces:504,grid:[18,28],image:"images/web/futuriste-5.webp",secours:"images/web/futuriste-5.jpg"},
- {id:"gothique-4",nom:"Le Donjon de la lune rouge",pieces:504,grid:[18,28],image:"images/web/gothique-4.webp",secours:"images/web/gothique-4.jpg"},
+ {id:"gothique-4",nom:"Le Donjon de la lune rouge",pieces:504,grid:[18,28],iv:2,image:"images/web/gothique-4.webp",secours:"images/web/gothique-4.jpg"},
  {id:"creatures-4",nom:"La Tortue-île",pieces:504,grid:[18,28],image:"images/web/creatures-4.webp",secours:"images/web/creatures-4.jpg"},
- {id:"magie-6",nom:"L'Académie de cristal",pieces:504,grid:[18,28],image:"images/web/magie-6.webp",secours:"images/web/magie-6.jpg"},
+ {id:"magie-6",nom:"L'Académie de cristal",pieces:504,grid:[18,28],iv:2,image:"images/web/magie-6.webp",secours:"images/web/magie-6.jpg"},
  {id:"creatures-5",nom:"Le Dragon de mousse",pieces:504,grid:[18,28],iv:2,image:"images/web/creatures-5.webp",secours:"images/web/creatures-5.jpg"},
- {id:"futuriste-6",nom:"La Cité sous la mer",pieces:504,grid:[18,28],image:"images/web/futuriste-6.webp",secours:"images/web/futuriste-6.jpg"},
+ {id:"futuriste-6",nom:"La Cité sous la mer",pieces:504,grid:[18,28],iv:2,image:"images/web/futuriste-6.webp",secours:"images/web/futuriste-6.jpg"},
  {id:"combat-4",nom:"La Forge des nains",pieces:504,grid:[18,28],image:"images/web/combat-4.webp",secours:"images/web/combat-4.jpg"},
  {id:"steampunk-5",nom:"L'Arbre mécanique",pieces:504,grid:[18,28],image:"images/web/steampunk-5.webp",secours:"images/web/steampunk-5.jpg"}
 ];
@@ -711,7 +711,7 @@ new MutationObserver(ms=>ms.forEach(m=>{const el=m.target;if(el.style.display===
 $('menuBtn').addEventListener('click',()=>{setTimeout(()=>{if($('menu').classList.contains('open'))$('menu').querySelector('.mi').focus()},20)});
 $('menuBtn').setAttribute('aria-expanded','false');new MutationObserver(()=>$('menuBtn').setAttribute('aria-expanded',$('menu').classList.contains('open'))).observe($('menu'),{attributes:true,attributeFilter:['class']});
 // ---------- PWA (au mieux) : service worker depuis un blob ----------
-window.__version='v13';window.__sw='non tenté';if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{window.__sw='enregistré';const chk=()=>reg.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});setInterval(chk,30*60e3)},err=>window.__sw='refusé : '+err.message);
+window.__version='v14';window.__sw='non tenté';if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{window.__sw='enregistré';const chk=()=>reg.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});setInterval(chk,30*60e3)},err=>window.__sw='refusé : '+err.message);
  // nouvelle version activée (clients.claim) : recharger une seule fois, hors d'un geste en cours, après sauvegarde, pour ne jamais garder l'ancien code en mémoire (PWA Android restée ouverte)
  {const had=!!navigator.serviceWorker.controller;let fait=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!had||fait)return;fait=true;const go=()=>{if(drag||pinch)return setTimeout(go,300);try{saveNow()}catch(e){}location.reload()};go()})}}else window.__sw='indisponible ('+location.protocol+')';
 $('vue').onclick=()=>fit(true,!window.__vueTout?true:false);$('taille').value=taille;$('taille').oninput=e=>{taille=+e.target.value;localStorage.setItem('morceluneTaille',taille);const s0=cam.s,ns=slot().k*taille;zoomAt(W/2,(H-TRAYH())/2+34,ns/s0)};$('menuBtn').onclick=e=>{e.stopPropagation();$('menu').classList.toggle('open')};document.addEventListener('pointerdown',e=>{if(!$('menu').contains(e.target)&&e.target!==$('menuBtn'))$('menu').classList.remove('open')});
