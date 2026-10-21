@@ -142,7 +142,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 <div class="mrow"><svg class="i"><use href="#i-grid"/></svg><span>Pièces (Libre)</span><select id="nb" aria-label="Nombre de pièces en mode Libre"><option value="100">≈ 100</option><option value="500">≈ 500</option><option value="750">≈ 750</option><option value="1000" selected>≈ 1000</option></select></div></div>
 <h3 class="mh">Couleur du fond</h3><div class="ms"><div id="fonds" role="radiogroup" aria-label="Couleur du fond"></div></div>
 <div class="ms"><button class="mi" id="statsBtn"><svg class="i"><use href="#i-stats"/></svg>Statistiques</button><button class="mi" id="restart"><svg class="i"><use href="#i-restart"/></svg>Recommencer</button><button class="mi" id="regles"><svg class="i"><use href="#i-help"/></svg>Règles</button>
-<div class="mrow" id="eclats"></div><div class="mrow" id="versionApp" style="font-size:12px;color:var(--mut);min-height:28px">Morcelune v10</div></div></div><div id="toast"></div>
+<div class="mrow" id="eclats"></div><div class="mrow" id="versionApp" style="font-size:12px;color:var(--mut);min-height:28px">Morcelune v11</div></div></div><div id="toast"></div>
 <button class="ib" id="plateau" title="Plateau de rangement" aria-label="Plateau de rangement : afficher les pièces mises de côté" aria-pressed="false"><svg class="i"><use href="#i-folder"/></svg><b id="platN"></b></button><canvas id="cv" role="application" aria-label="Table de puzzle : glisse les pièces du bandeau vers l'image" tabindex="0"></canvas><canvas id="fx" aria-hidden="true"></canvas><div id="info"></div>
 <div class="modal" id="bravo" role="dialog" aria-modal="true"><div><h2><svg class="i"><use href="#i-spark"/></svg>Puzzle terminé</h2><p id="msg"></p><img id="reveal" alt="Image révélée" style="display:none"><div class="act"><button class="btn pri" id="again">Continuer</button></div></div></div>
 <div class="modal" id="gal" role="dialog" aria-modal="true"><div><h2><svg class="i"><use href="#i-image"/></svg>Galerie</h2><p>Créations originales générées par le jeu, ou tes propres images.</p><div id="thumbs" class="grid"></div><div class="act"><label class="btn"><svg class="i"><use href="#i-upload"/></svg>Charger mes images<input type="file" id="file2" accept="image/*" multiple style="display:none"></label><button class="btn" id="closeGal">Fermer</button></div></div></div>
@@ -352,7 +352,7 @@ function iles(){const w=3000,h=2000,[c,g]=mk(w,h),r=rng(61),T=50;for(let y=0;y<h
  g.fillStyle='#8b4513';g.fillRect(1300,1000,300,90);g.fillStyle='#fff';g.fillRect(1440,760,14,240);g.fillRect(1460,780,120,160);g.fillStyle='#000';g.fillRect(1490,820,40,40);return c}
 const LIBRE=[['Donjon au trésor',donjon],['Grand prix',course],['Forêt enchantée',foret],['Archipel cubique',iles],['Pixel art',pixelArt],['Coucher de soleil',defaultCanvas],['Rétro arcade',arcade],['Sci-fi',scifi],['Cité néon',neon]];const fcache=[];
 // ---------- formes (jointures Bézier aléatoires, déterministes par graine) ----------
-let seed=1,shapeV=2,whimOn=false;// shapeV 1 = formes v9 (niveau 1 et parties sauvegardées avant la v10), 2 = découpes spéciales v10
+let seed=1,shapeV=2,whimOn=false;// shapeV 1 = formes v9 (niveau 1 et parties sauvegardées avant la v10), 2 = découpes spéciales v10 ; fx:1 (v11) = tenons voisins écartés, appliqué aussi aux parties reprises (positions inchangées)
 function jrng(type,r,c){let h=(seed*2654435761^(type*97+r*7919+c*104729))>>>0;return rng(h||1)}
 // ----- découpes spéciales v10 : définies PAR ARÊTE (les deux voisines parcourent le même chemin en sens inverse) -----
 function jsrng(type,r,c){return rng(((seed*40503)^(type*131+r*7907+c*104723)^0x5bd1e995)>>>0||1)}
@@ -369,15 +369,37 @@ function jspecial(type,r,c){if(!(type?(c<C-1&&r<R):(r<R-1&&c<C)))return null;con
   else {const z=[0,L*.12,L*.22];line([0,0],[z[1],m*.04]);line([z[1],m*.04],[z[2],-m*.03]);K(L*(.48+v*.06),m*.07,m*.125,m*.3,(w-.5)*.3);line(last(),[L*.8,m*.035]);line([L*.8,m*.035],[L*.9,-m*.03])}
   if(last()[0]!==L||last()[1]!==0)line(last(),[L,0]);
   const x0=type?(c+1)*pw:c*pw,y0=type?r*ph:(r+1)*ph,T=(p)=>type?[x0-p[1]*s,y0+p[0]]:[x0+p[0],y0+p[1]*s];return{start:[x0,y0],segs:pts.map(sg=>sg.map(T)),kind}}}
-function pieceSpeciale(p){if(shapeV<2)return null;const k=[p.r?jspecial(0,p.r-1,p.c):null,p.c<C-1?jspecial(1,p.r,p.c):null,p.r<R-1?jspecial(0,p.r,p.c):null,p.c?jspecial(1,p.r,p.c-1):null];return k.some(Boolean)}
+function pieceSpeciale(p){if(shapeV<2)return null;const k=[p.r?joint(0,p.r-1,p.c):null,p.c<C-1?joint(1,p.r,p.c):null,p.r<R-1?joint(0,p.r,p.c):null,p.c?joint(1,p.r,p.c-1):null];return k.some(j=>j&&!!j.kind)}
 // segments d'une jointure dans son sens canonique (gauche→droite ou haut→bas), en coordonnées monde
-function joint(type,r,c){const key=type+','+r+','+c;if(jcache.has(key))return jcache.get(key);const R_=jrng(type,r,c);for(let i=0;i<3;i++)R_();
+// v11 : deux tenons voisins (côtés adjacents d'une même pièce) pouvaient se toucher ou se croiser près d'un coin → coin presque détaché,
+// pièce « mal coupée », parfois chevauchement entre pièces. Les jointures sont maintenant toutes générées dans un ordre fixe ; chacune est
+// vérifiée contre ses voisines déjà fixées et, si l'écart est sous JMIN, recentrée / redressée / réduite (variantes JVAR). Les autres restent identiques.
+const JMIN=.075,JVAR=[{ka:1,da:0,kt:1,ks:1},{ka:.5,da:0,kt:.5,ks:1},{ka:0,da:0,kt:0,ks:1},{ka:0,da:.05,kt:0,ks:1},{ka:0,da:-.05,kt:0,ks:1},{ka:0,da:0,kt:0,ks:.9},{ka:0,da:.08,kt:0,ks:.9},{ka:0,da:-.08,kt:0,ks:.9},{ka:0,da:.1,kt:0,ks:.82},{ka:0,da:-.1,kt:0,ks:.82},{ka:0,da:0,kt:0,ks:.76},{ka:0,da:.04,kt:0,ks:.72},{ka:0,da:-.04,kt:0,ks:.72}];
+let jPrep=false;window.__jRepare=true;window.__jReparees=[];
+function joint(type,r,c){const key=type+','+r+','+c;if(jcache.has(key))return jcache.get(key);if(!jPrep&&C&&R){prepJoints();if(jcache.has(key))return jcache.get(key)}return jointGen(type,r,c,JVAR[0],shapeV>=2)}
+// points échantillonnés d'une jointure (8 par segment de Bézier)
+function jpts(j){if(j.pts)return j.pts;const o=[];let p0=j.start;for(const [a,b,e] of j.segs){for(let i=0;i<8;i++){const t=i/8,u=1-t;o.push([u*u*u*p0[0]+3*u*u*t*a[0]+3*u*t*t*b[0]+t*t*t*e[0],u*u*u*p0[1]+3*u*u*t*a[1]+3*u*t*t*b[1]+t*t*t*e[1]])}p0=e}o.push(p0);Object.defineProperty(j,'pts',{value:o});return o}
+// écart minimal (en fraction du côté) entre deux jointures qui se rejoignent au coin K, hors voisinage immédiat du coin
+function jecart(A,B,K){const pa=jpts(A),pb=jpts(B),R2=(pw*.12)**2,nb=pb.map(q=>(q[0]-K[0])**2+(q[1]-K[1])**2<R2);let mn=Infinity;
+ for(const q of pa){const na=(q[0]-K[0])**2+(q[1]-K[1])**2<R2;for(let i=0;i<pb.length;i++){if(na&&nb[i])continue;const d=(q[0]-pb[i][0])**2+(q[1]-pb[i][1])**2;if(d<mn)mn=d}}return Math.sqrt(mn)/pw}
+// voisines perpendiculaires (déjà fixées) d'une jointure, avec le coin commun
+function jvoisines(type,r,c){const v=[],add=(t,rr,cc,K)=>{const k=t+','+rr+','+cc;if(rr>=0&&cc>=0&&jcache.has(k))v.push([jcache.get(k),K])};
+ if(!type){const y=(r+1)*ph;if(c>0){add(1,r,c-1,[c*pw,y]);add(1,r+1,c-1,[c*pw,y])}if(c<C-1){add(1,r,c,[(c+1)*pw,y]);add(1,r+1,c,[(c+1)*pw,y])}}
+ else{const x=(c+1)*pw;if(r>0){add(0,r-1,c,[x,r*ph]);add(0,r-1,c+1,[x,r*ph])}if(r<R-1){add(0,r,c,[x,(r+1)*ph]);add(0,r,c+1,[x,(r+1)*ph])}}return v}
+function prepJoints(){jPrep=true;const T0=performance.now(),rep=[];
+ for(let r=0;r<R;r++)for(let c=0;c<C;c++)for(const type of [0,1]){if(type?c>=C-1:r>=R-1)continue;const key=type+','+r+','+c;
+  const cands=[];if(shapeV>=2&&jspecial(type,r,c))cands.push(-1);JVAR.forEach((v,i)=>cands.push(i));let best=null,bestE=-1,bi=0;
+  for(const ci of cands){const j=ci<0?jointGen(type,r,c,null,true):jointGen(type,r,c,JVAR[ci],false);if(!window.__jRepare){best=j;bi=ci;break}
+   const vs=jvoisines(type,r,c);let e=Infinity;for(const [n,K] of vs)e=Math.min(e,jecart(j,n,K));if(e>=JMIN){best=j;bi=ci;break}if(e>bestE){bestE=e;best=j;bi=ci}}
+  if(bi!==cands[0])rep.push([type,r,c,bi]);jcache.set(key,best)}
+ window.__jReparees=rep;window.__jPrepMs=performance.now()-T0}
+function jointGen(type,r,c,V,spec){const R_=jrng(type,r,c);for(let i=0;i<3;i++)R_();
  // côté partagé = UNE courbe (deux voisins la parcourent en sens inverse) → emboîtement exact
  // tenon gros (tête ≈ 30-35 % du côté), col visible, décalé, incliné ; épaules ondulées ou en angle ; quelques têtes atypiques
  const s=type?vt[r][c]:hz[r][c],L=type?ph:pw,m=Math.min(pw,ph),u=x=>R_()*2*x-x,pick=R_();
- if(shapeV>=2&&r>=0&&c>=0){const sp=jspecial(type,r,c);if(sp)return jcache.set(key,sp(type,r,c,s,L,m)),jcache.get(key)}
- const a=L*(.5+u(.06)),rad=m*(.15+R_()*.018),odd=R_()<.14,rx=rad*(odd?.82+R_()*.12:.95+R_()*.1),ry=rad*(odd?1.06+R_()*.08:.95+R_()*.1);
- const nw=m*(.068+R_()*.022),hc=Math.max(ry*.9+m*.06,m*(.185+R_()*.03)),th=u(.16),ph0=Math.asin(Math.min(.9,nw*1.25/rx));
+ if(spec&&r>=0&&c>=0){const sp=jspecial(type,r,c);if(sp)return sp(type,r,c,s,L,m)}
+ V=V||JVAR[0];const a=L*(.5+V.ka*u(.06)+V.da),rad=m*(.15+R_()*.018)*V.ks,odd=R_()<.14,rx=rad*(odd?.82+R_()*.12:.95+R_()*.1),ry=rad*(odd?1.06+R_()*.08:.95+R_()*.1);
+ const nw=m*(.068+R_()*.022),hc=Math.max(ry*.9+m*.06,m*(.185+R_()*.03)),th=u(.16)*V.kt,ph0=Math.asin(Math.min(.9,nw*1.25/rx));
  const cs=Math.cos(th),sn=Math.sin(th),RT=([x,y])=>[a+(x-a)*cs-y*sn,(x-a)*sn+y*cs];
  const Q=t=>RT([a+rx*Math.sin(t),hc-ry*Math.cos(t)]),Dl=t=>{const v=[-rx*Math.cos(t),-ry*Math.sin(t)],n=Math.hypot(...v);return[(v[0]*cs-v[1]*sn)/n,(v[0]*sn+v[1]*cs)/n]};
  const t1=-ph0,t2=-(2*Math.PI-ph0),P1=Q(t1),P2=Q(t2),e=m*.05,pts=[],B1=RT([a-nw,0]),B2=RT([a+nw,0]);
@@ -390,7 +412,7 @@ function joint(type,r,c){const key=type+','+r+','+c;if(jcache.has(key))return jc
  pts.push([[P2[0]+D2[0]*e,P2[1]+D2[1]*e],[B2[0],B2[1]+m*.035],B2]);
  const sh2=shoulder(B2[0],L,0);sh2[0][0]=[B2[0]+(L-B2[0])*.33,B2[1]+(sh2[0][0][1])];pts.push(...sh2);
  const x0=type?(c+1)*pw:c*pw,y0=type?r*ph:(r+1)*ph,T=(p)=>type?[x0-p[1]*s,y0+p[0]]:[x0+p[0],y0+p[1]*s];
- const res={start:[x0,y0],segs:pts.map(sg=>sg.map(T))};jcache.set(key,res);return res}
+ return{start:[x0,y0],segs:pts.map(sg=>sg.map(T))}}
 const jcache=new Map();
 function addJoint(path,j,rev,ox,oy){if(!rev){for(const [a,b,e] of j.segs)path.bezierCurveTo(a[0]-ox,a[1]-oy,b[0]-ox,b[1]-oy,e[0]-ox,e[1]-oy)}
  else{const S=j.segs;for(let i=S.length-1;i>=0;i--){const [a,b]=S[i],e=i?S[i-1][2]:j.start;path.bezierCurveTo(b[0]-ox,b[1]-oy,a[0]-ox,a[1]-oy,e[0]-ox,e[1]-oy)}}}
@@ -440,7 +462,7 @@ function recadre(im,c,r){const cell=Math.min(im.width/c,im.height/r),w=Math.roun
 let tray=[],trayX=0,sel=null,selP=null;const TRAYH=()=>W<600?104:118;
 function setup(n,saved){shapeV=saved?(saved.forme||1):(level==1?1:2);whimOn=!!saved&&(saved.forme?!!saved.motifs:true);undoS=[];redoS=[];setTimeout(majUR);hint=null;$('rot').style.display=(saved?(saved.rot||[]).some(v=>v):rotOn)?'':'none';$('apercu').style.display=(level||catL)?'none':'';if(!String(imgSrc).startsWith('k:')&&!saved)catL=catL;N=n;const ar=img.width/img.height;
  [C,R]=(level&&NIVEAUX[level-1]&&NIVEAUX[level-1].grid)||grille(img.width,img.height,n);N=C*R;img=recadre(img,C,R);
- IW=3000;pw=ph=IW/C;IH=ph*R;tab=Math.min(pw,ph)*.44;jcache.clear();
+ IW=3000;pw=ph=IW/C;IH=ph*R;tab=Math.min(pw,ph)*.44;jcache.clear();jPrep=false;
  const lr=level?rng(911+level*7919):Math.random,rnd=()=>lr()<.5?1:-1;hz=saved?saved.hz:[...Array(R)].map(()=>[...Array(C)].map(rnd));vt=saved?saved.vt:[...Array(R)].map(()=>[...Array(C)].map(rnd));
  seed=saved?(saved.seed||1):level?(level*2654435761>>>0)%1e9+1:(Math.random()*1e9|0);
  P=[];G=new Map();hitC=null;order=[];tray=[];trayX=0;sel=null;const T0=performance.now();
@@ -604,7 +626,7 @@ let flash=null;function anim(){dirty=true;if((flash&&performance.now()<flash.unt
 function eclats(){return +(localStorage.getItem('puzzleEclats')||0)}function majEclats(){$('eclats').innerHTML=ic('spark')+'<span>Éclats</span><b style="margin-left:auto;color:var(--acc)">'+eclats()+'</b>'}
 // ---------- sauvegarde ----------
 let saveT;function save(){clearTimeout(saveT);saveT=setTimeout(saveNow,400)}
-function saveNow(){if(!P.length)return;const st={v:3,t:Date.now(),rot:P.map(p=>p.rot||0),seed,tray:tray.map(g=>g.pcs[0].i),shelf:P.filter(p=>p.shelf).map(p=>p.i),level,n:N,hz,vt,elapsed:time(),done,img:imgSrc,forme:shapeV,motifs:whimOn?1:0,u:undoS.slice(-10),groups:order.map(g=>[Math.round(g.dx*10)/10,Math.round(g.dy*10)/10,g.lock?1:0,g.pcs.map(p=>p.i)])};
+function saveNow(){if(!P.length)return;const st={v:3,t:Date.now(),rot:P.map(p=>p.rot||0),seed,tray:tray.map(g=>g.pcs[0].i),shelf:P.filter(p=>p.shelf).map(p=>p.i),level,n:N,hz,vt,elapsed:time(),done,img:imgSrc,forme:shapeV,fx:1,motifs:whimOn?1:0,u:undoS.slice(-10),groups:order.map(g=>[Math.round(g.dx*10)/10,Math.round(g.dy*10)/10,g.lock?1:0,g.pcs.map(p=>p.i)])};
  const js=JSON.stringify(st);if(level&&!done&&/^g\d+$/.test(imgSrc))try{localStorage.setItem('morceluneNiv'+level,js)}catch(e){}else if(level&&done)localStorage.removeItem('morceluneNiv'+level);db().then(d=>{const tx=d.transaction('etat','readwrite',{durability:'strict'});tx.objectStore('etat').put(js,'cur')}).catch(()=>{});try{localStorage.setItem('puzzleEtat',js)}catch(e){console.warn('sauvegarde impossible',e)}}
 setInterval(()=>{if(running)saveNow()},5000);addEventListener('pagehide',saveNow);document.addEventListener('visibilitychange',()=>{if(document.hidden)saveNow()});
 function storePhoto(c){// réduit et compresse, réessaie plus petit si quota dépassé
@@ -685,7 +707,7 @@ new MutationObserver(ms=>ms.forEach(m=>{const el=m.target;if(el.style.display===
 $('menuBtn').addEventListener('click',()=>{setTimeout(()=>{if($('menu').classList.contains('open'))$('menu').querySelector('.mi').focus()},20)});
 $('menuBtn').setAttribute('aria-expanded','false');new MutationObserver(()=>$('menuBtn').setAttribute('aria-expanded',$('menu').classList.contains('open'))).observe($('menu'),{attributes:true,attributeFilter:['class']});
 // ---------- PWA (au mieux) : service worker depuis un blob ----------
-window.__version='v10';window.__sw='non tenté';if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{window.__sw='enregistré';const chk=()=>reg.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});setInterval(chk,30*60e3)},err=>window.__sw='refusé : '+err.message);
+window.__version='v11';window.__sw='non tenté';if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{window.__sw='enregistré';const chk=()=>reg.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});setInterval(chk,30*60e3)},err=>window.__sw='refusé : '+err.message);
  // nouvelle version activée (clients.claim) : recharger une seule fois, hors d'un geste en cours, après sauvegarde, pour ne jamais garder l'ancien code en mémoire (PWA Android restée ouverte)
  {const had=!!navigator.serviceWorker.controller;let fait=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!had||fait)return;fait=true;const go=()=>{if(drag||pinch)return setTimeout(go,300);try{saveNow()}catch(e){}location.reload()};go()})}}else window.__sw='indisponible ('+location.protocol+')';
 $('vue').onclick=()=>fit(true,!window.__vueTout?true:false);$('taille').value=taille;$('taille').oninput=e=>{taille=+e.target.value;localStorage.setItem('morceluneTaille',taille);const s0=cam.s,ns=slot().k*taille;zoomAt(W/2,(H-TRAYH())/2+34,ns/s0)};$('menuBtn').onclick=e=>{e.stopPropagation();$('menu').classList.toggle('open')};document.addEventListener('pointerdown',e=>{if(!$('menu').contains(e.target)&&e.target!==$('menuBtn'))$('menu').classList.remove('open')});
