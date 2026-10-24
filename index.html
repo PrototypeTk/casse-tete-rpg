@@ -142,7 +142,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 <div class="mrow"><svg class="i"><use href="#i-grid"/></svg><span>Pièces (Libre)</span><select id="nb" aria-label="Nombre de pièces en mode Libre"><option value="100">≈ 100</option><option value="500">≈ 500</option><option value="750">≈ 750</option><option value="1000" selected>≈ 1000</option></select></div></div>
 <h3 class="mh">Couleur du fond</h3><div class="ms"><div id="fonds" role="radiogroup" aria-label="Couleur du fond"></div></div>
 <div class="ms"><button class="mi" id="statsBtn"><svg class="i"><use href="#i-stats"/></svg>Statistiques</button><button class="mi" id="restart"><svg class="i"><use href="#i-restart"/></svg>Recommencer</button><button class="mi" id="regles"><svg class="i"><use href="#i-help"/></svg>Règles</button>
-<div class="mrow" id="eclats"></div><div class="mrow" id="versionApp" style="font-size:12px;color:var(--mut);min-height:28px">Morcelune v16</div></div></div><div id="toast"></div>
+<div class="mrow" id="eclats"></div><div class="mrow" id="versionApp" style="font-size:12px;color:var(--mut);min-height:28px">Morcelune v17</div></div></div><div id="toast"></div>
 <button class="ib" id="plateau" title="Plateau de rangement" aria-label="Plateau de rangement : afficher les pièces mises de côté" aria-pressed="false"><svg class="i"><use href="#i-folder"/></svg><b id="platN"></b></button><canvas id="cv" role="application" aria-label="Table de puzzle : glisse les pièces du bandeau vers l'image" tabindex="0"></canvas><canvas id="fx" aria-hidden="true"></canvas><div id="info"></div>
 <div class="modal" id="bravo" role="dialog" aria-modal="true"><div><h2><svg class="i"><use href="#i-spark"/></svg>Puzzle terminé</h2><p id="msg"></p><img id="reveal" alt="Image révélée" style="display:none"><div class="act"><button class="btn pri" id="again">Continuer</button></div></div></div>
 <div class="modal" id="gal" role="dialog" aria-modal="true"><div><h2><svg class="i"><use href="#i-image"/></svg>Galerie</h2><p>Créations originales générées par le jeu, ou tes propres images.</p><div id="thumbs" class="grid"></div><div class="act"><label class="btn"><svg class="i"><use href="#i-upload"/></svg>Charger mes images<input type="file" id="file2" accept="image/*" multiple style="display:none"></label><button class="btn" id="closeGal">Fermer</button></div></div></div>
@@ -284,7 +284,16 @@ function loadUrl(urls,cache,key){return cache[key]?Promise.resolve(cache[key]):n
 let hueC=null;function hueCanvas(key){return new Promise(ok=>{if(!HUEMAP[key])return ok(null);const im=new Image();im.onload=()=>{const [c,g]=mk(im.width,im.height);g.drawImage(im,0,0);ok(c)};im.onerror=()=>ok(null);im.src=HUEMAP[key]})}
 
 // charge l'image d'un niveau et l'agrandit (lissage haute qualité) pour des pièces nettes
-function lvlImg(i){return lcache[i]?Promise.resolve(lcache[i]):new Promise((ok,ko)=>{const im=new Image();im.onload=()=>{const k=Math.max(1,3000/im.width),[c,g]=mk(Math.round(im.width*k),Math.round(im.height*k));g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(im,0,0,c.width,c.height);c.__url=im.src.startsWith('data:')?null:NIVEAUX[i][im.src.endsWith(NIVEAUX[i].secours)?'secours':'image'];ok(lcache[i]=c)};im.onerror=()=>{if(im.src!==NIVEAUX[i].secours&&NIVEAUX[i].secours){window.__secours=true;im.src=NIVEAUX[i].secours}else ko()};im.src=NIVEAUX[i].image})}
+// v17 : image HD 2720×4080 (images/hd, mêmes scènes ×2) d'abord, repli sur l'image 1360×2040 (webp puis jpg) ; seuls les 2 derniers niveaux restent en mémoire
+const hdUrl=u=>u&&u.replace('images/web/','images/hd/');
+function lvlImg(i){return lcache[i]?Promise.resolve(lcache[i]):new Promise((ok,ko)=>{const im=new Image(),urls=[NIVEAUX[i].image,NIVEAUX[i].secours].filter(Boolean);let j=0;im.onload=()=>{const k=Math.max(1,3000/im.width),[c,g]=mk(Math.round(im.width*k),Math.round(im.height*k));g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(im,0,0,c.width,c.height);c.__url=im.src.startsWith('data:')?null:NIVEAUX[i][im.src.endsWith(NIVEAUX[i].secours)?'secours':'image'];c.__hd=false;window.__imgNat=[im.naturalWidth,im.naturalHeight];lcache.forEach((v,x)=>{if(v&&x!==i&&x!==lvlImg.last)delete lcache[x]});lvlImg.last=i;ok(lcache[i]=c);hdLoad(i,c)};im.onerror=()=>{if(++j<urls.length){if(urls[j]===NIVEAUX[i].secours)window.__secours=true;im.src=urls[j]}else ko()};im.src=urls[0]})}
+// v17 : la version HD (×2, même scène, même cadrage) est chargée APRÈS l'image web, sans bloquer le début de partie ; elle est peinte dans le même
+// canevas (mêmes dimensions → mêmes découpes, même sauvegarde), puis les pièces sont redessinées par tranches de ≈ 6 ms. Mode « économie de données » : pas de HD.
+function hdLoad(i,c){const u=hdUrl(NIVEAUX[i].image);if(!u||c.__hd||(navigator.connection&&navigator.connection.saveData))return;const im=new Image();im.decoding='async';
+ im.onload=async()=>{try{if(im.decode)await im.decode()}catch(e){}if(lcache[i]!==c||c.__hd)return;const g=c.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(im,0,0,c.width,c.height);
+  c.__hd=true;window.__imgNat=[im.naturalWidth,im.naturalHeight];if(imgSrc==='g'+i&&P.length&&C&&R)hdSwap()};im.onerror=()=>{};im.src=u}
+let hdT;function hdSwap(){clearTimeout(hdT);img=recadre(lcache[+imgSrc.slice(1)],C,R);const lev=setupLevel;let k=0;const step=()=>{if(setupLevel!==lev)return;const t=performance.now();while(k<P.length&&performance.now()-t<6){const p=P[k++];if(p.bmp){p.bmp=null;ens(p)}}
+ if(k<P.length)hdT=setTimeout(step,(drag||pinch||zt||vel||camGo)?60:0);else{hiClear();lockDirty=true;dirty=true;window.__hdPret=Date.now()}};hdT=setTimeout(step,0)}
 // ----- sauvegarde de la progression : jamais effacée, jamais diminuée, copie de secours (clé + IndexedDB) -----
 const PROGK=['puzzleProg','puzzleEclats','puzzleStats'],BAKK='morceluneSauvegarde';window.__migrProg=false;
 (function gardeProg(){const S=Storage.prototype,set0=S.setItem,rem0=S.removeItem,clr0=S.clear;const num=v=>+(v||0);
@@ -461,19 +470,19 @@ function whimShape(k,g){// unité : carré [-1,1]
 function whimsy(){const cand=P.filter(p=>!p.edge);if(!cand.length||!level&&!catL)return;const id=level?NIVEAUX[level-1].id:'libre',sty=WSTY[id.split('-')[0]]||WSTY.magie;
  const rr=rng(4241+[...id].reduce((a,ch)=>a*31+ch.charCodeAt(0)>>>0,7)+N*13),n=4+Math.floor(rr()*5),used=new Set();
  for(let k=0;k<n*20&&used.size<n;k++){const p=cand[Math.floor(rr()*cand.length)];if([...used].some(q=>Math.abs(q.r-p.r)<3&&Math.abs(q.c-p.c)<3))continue;used.add(p);p.whim=sty[Math.floor(rr()*sty.length)]}window.__whims=[...used].map(p=>[p.i,p.whim])}
-function render(p){const t=tab,cw=Math.ceil(pw+2*t),ch=Math.ceil(ph+2*t),q=Math.min(DPR,1.5),o=document.createElement('canvas');o.width=Math.ceil(cw*q);o.height=Math.ceil(ch*q);
+function render(p,qh){const t=tab,cw=Math.ceil(pw+2*t),ch=Math.ceil(ph+2*t),q=qh||Math.min(DPR,1.5),o=document.createElement('canvas');o.width=Math.ceil(cw*q);o.height=Math.ceil(ch*q);
  const g=o.getContext('2d');g.scale(q,q);const {r,c}=p,path=piecePath(p,c*pw-t,r*ph-t);
  const m=Math.min(pw,ph),kx=img.width/IW,ky=img.height/IH,flat=!!(p.g&&(p.g.lock||p.g.pcs.length>1));p.flat=flat;
- g.save();g.clip(path);g.drawImage(img,(c*pw-t)*kx,(r*ph-t)*ky,cw*kx,ch*ky,0,0,cw,ch);
+ g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.save();g.clip(path);g.drawImage(img,(c*pw-t)*kx,(r*ph-t)*ky,cw*kx,ch*ky,0,0,cw,ch);
  if(!flat){// léger biseau + contour fin : seulement pour une pièce isolée
   const bv=Math.max(1,m*.03);// biseau doux : deux passes (large et pâle, puis fine) pour un dégradé sans filtre coûteux
   g.translate(bv*.7,bv*.7);g.lineWidth=bv*3;g.strokeStyle='rgba(255,250,235,.16)';g.stroke(path);g.lineWidth=bv*1.4;g.strokeStyle='rgba(255,250,235,.30)';g.stroke(path);g.translate(-bv*1.4,-bv*1.4);g.lineWidth=bv*3;g.strokeStyle='rgba(0,0,0,.14)';g.stroke(path);g.lineWidth=bv*1.4;g.strokeStyle='rgba(0,0,0,.28)';g.stroke(path);g.restore();
   g.lineWidth=Math.max(.6,m*.008);g.strokeStyle='rgba(0,0,0,.45)';g.stroke(path);
   if(p.whim){const k=m*.26;g.save();g.clip(path);g.translate(t+pw/2,t+ph/2);g.scale(k,k);whimShape(p.whim,g);g.lineJoin='round';g.lineCap='round';g.lineWidth=2.6/k*Math.max(1,m*.012);g.strokeStyle='rgba(0,0,0,.42)';g.stroke();g.translate(-.04,-.04);g.lineWidth=1.3/k*Math.max(1,m*.012);g.strokeStyle='rgba(255,236,190,.75)';g.stroke();g.restore()}}
  else{g.restore();// pièce de groupe : bord dilaté avec l'image elle-même → chevauchement de 1-2 px, aucune jointure visible
-  const [tc,tg]=mk(o.width,o.height);tg.drawImage(img,(c*pw-t)*kx,(r*ph-t)*ky,cw*kx,ch*ky,0,0,o.width,o.height);const pat=g.createPattern(tc,'no-repeat');pat.setTransform(new DOMMatrix([1/q,0,0,1/q,0,0]));
+  const [tc,tg]=mk(o.width,o.height);tg.imageSmoothingQuality='high';tg.drawImage(img,(c*pw-t)*kx,(r*ph-t)*ky,cw*kx,ch*ky,0,0,o.width,o.height);const pat=g.createPattern(tc,'no-repeat');pat.setTransform(new DOMMatrix([1/q,0,0,1/q,0,0]));
   g.strokeStyle=pat;g.lineWidth=Math.max(2.5,m*.035);g.lineJoin='round';g.stroke(path)}
- p.bmp=o;p.bw=cw;p.bh=ch;p.sh=p.gl=null;if(p.hue!==undefined)return;
+ if(qh)return o;p.bmp=o;p.bw=cw;p.bh=ch;p.sh=p.gl=null;if(p.hue!==undefined)return;
  // couleur dominante (moyenne du centre) pour le tri
  let d;try{const cx=Math.floor(o.width*.3),cy=Math.floor(o.height*.3);d=g.getImageData(cx,cy,Math.max(1,Math.floor(o.width*.4)),Math.max(1,Math.floor(o.height*.4))).data}catch(e){window.__teinteRepli=true;if(hueC){const hc=hueC.getContext('2d'),x=Math.min(hueC.width-1,Math.floor((c+.5)/C*hueC.width)),y=Math.min(hueC.height-1,Math.floor((r+.5)/R*hueC.height));d=hc.getImageData(x,y,1,1).data}else d=new Uint8ClampedArray([128,128,128,255])}let R2=0,G2=0,B2=0,n=0;for(let i=0;i<d.length;i+=16){R2+=d[i];G2+=d[i+1];B2+=d[i+2];n++}
  R2/=n;G2/=n;B2/=n;const mx=Math.max(R2,G2,B2),mn=Math.min(R2,G2,B2),l=(mx+mn)/510;let h=0;if(mx>mn){h=mx==R2?(G2-B2)/(mx-mn):mx==G2?2+(B2-R2)/(mx-mn):4+(R2-G2)/(mx-mn);h=(h*60+360)%360}
@@ -485,7 +494,7 @@ function recadre(im,c,r){const cell=Math.min(im.width/c,im.height/r),w=Math.roun
 // ---------- partie ----------
 let tray=[],trayX=0,sel=null,selP=null;const TRAYH=()=>W<600?104:118;
 let setupLevel=0;
-function setup(n,saved){setupLevel=level;shapeV=saved?(saved.forme||1):(level==1?1:2);whimOn=!!saved&&(saved.forme?!!saved.motifs:true);undoS=[];redoS=[];setTimeout(majUR);hint=null;$('rot').style.display=(saved?(saved.rot||[]).some(v=>v):rotOn)?'':'none';$('apercu').style.display=(level||catL)?'none':'';if(!String(imgSrc).startsWith('k:')&&!saved)catL=catL;N=n;const ar=img.width/img.height;
+function setup(n,saved){setupLevel=level;hiClear();shapeV=saved?(saved.forme||1):(level==1?1:2);whimOn=!!saved&&(saved.forme?!!saved.motifs:true);undoS=[];redoS=[];setTimeout(majUR);hint=null;$('rot').style.display=(saved?(saved.rot||[]).some(v=>v):rotOn)?'':'none';$('apercu').style.display=(level||catL)?'none':'';if(!String(imgSrc).startsWith('k:')&&!saved)catL=catL;N=n;const ar=img.width/img.height;
  [C,R]=(level&&NIVEAUX[level-1]&&NIVEAUX[level-1].grid)||grille(img.width,img.height,n);N=C*R;img=recadre(img,C,R);
  IW=3000;pw=ph=IW/C;IH=ph*R;tab=Math.min(pw,ph)*.44;jcache.clear();jPrep=false;
  const lr=level?rng(911+level*7919):Math.random,rnd=()=>lr()<.5?1:-1;hz=saved?saved.hz:[...Array(R)].map(()=>[...Array(C)].map(rnd));vt=saved?saved.vt:[...Array(R)].map(()=>[...Array(C)].map(rnd));
@@ -504,6 +513,15 @@ function hues(){// couleur dominante de chaque pièce depuis une vignette C×R (
 // niveaux de détail : copies réduites (½, ¼) quand la pièce est affichée petite
 const lodM=new WeakMap();function lod(B,sc){let k=1;while(sc<.5/k&&k<4)k*=2;if(k==1)return B;let L=lodM.get(B);if(!L)lodM.set(B,L={});if(!L[k]){const [c,g]=mk(Math.max(1,Math.round(B.width/k)),Math.max(1,Math.round(B.height/k)));g.imageSmoothingQuality='high';g.drawImage(B,0,0,c.width,c.height);c.pad=B.pad;L[k]=c}return L[k]}
 const ens=p=>{if(!p.bmp)render(p);return p};
+// v17 : au zoom, les pièces VISIBLES sont redessinées depuis l'image à la résolution de l'écran (paliers 2, 3, 4 px par unité) au lieu d'agrandir
+// leur bitmap de base (1,5 px/unité) ou la couche des pièces posées (≈0,93 px/unité). Budget mémoire 24 Mpx (≈ 96 Mo), plus ancien libéré d'abord ;
+// au plus 6 rendus par image (le bitmap de base sert en attendant) ; tout est libéré au dézoom et au changement de niveau.
+const HI=new Map(),HIMAX=24e6;let hiPx=0,hiN=0,hiQ=0;
+function hiPalier(sd){if(sd<=LQ*1.08)return 0;return sd<=1.35?1.35:sd<=2.1?2:sd<=3.1?3:4}
+function hiClear(){HI.clear();hiPx=0}
+function hiB(p){if(!hiQ||!p.bmp||(!p.inL&&hiQ<=Math.min(DPR,1.5)*1.15))return null;let e=HI.get(p);if(e&&e.q===hiQ&&e.src===p.bmp){e.t=performance.now();return e.c}
+ if(hiN>=6){dirty=true;return e&&e.src===p.bmp?e.c:null}hiN++;const c=render(p,hiQ);if(e)hiPx-=e.c.width*e.c.height;HI.set(p,{q:hiQ,src:p.bmp,c,t:performance.now()});hiPx+=c.width*c.height;
+ if(hiPx>HIMAX){const l=[...HI.entries()].sort((a,b)=>a[1].t-b[1].t);for(const [k,v] of l){if(hiPx<=HIMAX*.8)break;if(k===p)continue;HI.delete(k);hiPx-=v.c.width*v.c.height}}return c}
 // pré-rendu par tranches (≈ 6 ms) pendant les temps morts, bandeau d'abord
 let warmT;function warm(){clearTimeout(warmT);let i=0;const list=tray.map(g=>g.pcs[0]).concat(P);const step=()=>{const t=performance.now();while(i<list.length&&performance.now()-t<6)ens(list[i++]);if(i<list.length)warmT=setTimeout(step,(drag||pinch||zt||vel||camGo)?120:0)};warmT=setTimeout(step,30)}
 // calque figé : pièces posées dessinées une fois dans un canevas à l'échelle du monde
@@ -545,9 +563,10 @@ function draw(){frames++;if(physics())dirty=true;const now=performance.now();if(
  ctx.setTransform(DPR,0,0,DPR,0,0);{const k=fond+'|'+W+'|'+H+'|'+DPR;if(k!==bgCK){bgCK=k;let g;[bgC,g]=mk(Math.ceil(W*DPR),Math.ceil(H*DPR));g.scale(DPR,DPR);g.fillStyle=bgFill();g.fillRect(0,0,W,H);if(window.texture)texture(g)}ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(bgC,0,0)}ctx.setTransform(DPR*cam.s,0,0,DPR*cam.s,-cam.x*cam.s*DPR,-cam.y*cam.s*DPR);
  ctx.fillStyle='rgba(255,255,255,.07)';ctx.fillRect(0,0,IW,IH);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2/cam.s;ctx.strokeRect(0,0,IW,IH);
  const vx0=cam.x-tab*2,vy0=cam.y-tab*2,vx1=cam.x+W/cam.s+tab,vy1=cam.y+H/cam.s+tab;
- const m0=Math.min(pw,ph),sd=cam.s*DPR;ctx.imageSmoothingQuality='low';
- const now2=performance.now(),drawP=(p,sh)=>{ens(p);let x=p.c*pw+(p.g.dx)-tab,y=p.r*ph+p.g.dy-tab;if(p.st){const f=1-(now2-p.st)/160;if(f<=0)p.st=0;else{const e=f*f*f;x+=p.sx*e;y+=p.sy*e;dirty=true}}if(x>vx1||y>vy1||x+p.bw<vx0||y+p.bh<vy0)return;const B0=sh?shade(p,sh.gold):p.bmp,B=lod(B0,p.bw*sd/p.bmp.width),pd=sh?B.pad:0,ox=sh?sh.off:0;if(sh)ctx.globalAlpha=sh.alpha;if(p.rot){ctx.save();ctx.translate(x+p.bw/2+ox,y+p.bh/2+ox);ctx.rotate(p.rot*Math.PI/2);ctx.drawImage(B,-p.bw/2-pd,-p.bh/2-pd,p.bw+pd*2,p.bh+pd*2);ctx.restore()}else ctx.drawImage(B,x-pd+ox,y-pd+ox,p.bw+pd*2,p.bh+pd*2);if(sh)ctx.globalAlpha=1};
+ const m0=Math.min(pw,ph),sd=cam.s*DPR;hiQ=hiPalier(sd);hiN=0;if(!hiQ&&HI.size)hiClear();ctx.imageSmoothingQuality=hiQ?'high':'low';
+ const now2=performance.now(),drawP=(p,sh)=>{ens(p);let x=p.c*pw+(p.g.dx)-tab,y=p.r*ph+p.g.dy-tab;if(p.st){const f=1-(now2-p.st)/160;if(f<=0)p.st=0;else{const e=f*f*f;x+=p.sx*e;y+=p.sy*e;dirty=true}}if(x>vx1||y>vy1||x+p.bw<vx0||y+p.bh<vy0)return;const B0=sh?shade(p,sh.gold):(hiB(p)||p.bmp),B=sh?lod(B0,p.bw*sd/p.bmp.width):B0===p.bmp?lod(B0,p.bw*sd/p.bmp.width):B0,pd=sh?B.pad:0,ox=sh?sh.off:0;if(sh)ctx.globalAlpha=sh.alpha;if(p.rot){ctx.save();ctx.translate(x+p.bw/2+ox,y+p.bh/2+ox);ctx.rotate(p.rot*Math.PI/2);ctx.drawImage(B,-p.bw/2-pd,-p.bh/2-pd,p.bw+pd*2,p.bh+pd*2);ctx.restore()}else ctx.drawImage(B,x-pd+ox,y-pd+ox,p.bw+pd*2,p.bh+pd*2);if(sh)ctx.globalAlpha=1};
  if(lockDirty)rebuildLock();if(lockL.width>1&&lockL.height>1)ctx.drawImage(lockL,0,0,IW,IH);
+ if(hiQ)for(const g of order){if(!g.lock||g.tray)continue;for(const p of g.pcs)if(p.inL&&!p.st)drawP(p)}
  for(const g of order){if(g.tray)continue;if(edgesOnly&&!g.lock&&g.pcs.length==1&&!g.pcs[0].edge)continue;const hl=g===sel,fl=flash&&flash.g===g&&now2<flash.until,dg=drag&&drag.g===g&&!g.tray&&(drag.moved||drag.mode=='out');
   if(!g.lock){const sh=hl||fl?{gold:1,alpha:hl?.95:.8,off:0}:{alpha:dg?.55:.42,off:m0*(dg?.09:.03)};for(const p of g.pcs)drawP(p,sh);if(dg){for(const p of g.pcs)drawP(p,{alpha:.25,off:m0*.02})}for(const p of g.pcs)drawP(p)}
   else{for(const p of g.pcs){if(p.inL)continue;if(fl)drawP(p,{gold:1,alpha:Math.max(0,(flash.until-now2)/500),off:0});drawP(p);if(!p.st&&!fl&&p.g.lock){commit(p);dirty=true}}}}
@@ -733,13 +752,13 @@ new MutationObserver(ms=>ms.forEach(m=>{const el=m.target;if(el.style.display===
 $('menuBtn').addEventListener('click',()=>{setTimeout(()=>{if($('menu').classList.contains('open'))$('menu').querySelector('.mi').focus()},20)});
 $('menuBtn').setAttribute('aria-expanded','false');new MutationObserver(()=>$('menuBtn').setAttribute('aria-expanded',$('menu').classList.contains('open'))).observe($('menu'),{attributes:true,attributeFilter:['class']});
 // ---------- PWA (au mieux) : service worker depuis un blob ----------
-window.__version='v16';window.__sw='non tenté';if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{window.__sw='enregistré';const chk=()=>reg.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});setInterval(chk,30*60e3)},err=>window.__sw='refusé : '+err.message);
+window.__version='v17';window.__sw='non tenté';if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{window.__sw='enregistré';const chk=()=>reg.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});setInterval(chk,30*60e3)},err=>window.__sw='refusé : '+err.message);
  // nouvelle version activée (clients.claim) : recharger une seule fois, hors d'un geste en cours, après sauvegarde, pour ne jamais garder l'ancien code en mémoire (PWA Android restée ouverte)
  {const had=!!navigator.serviceWorker.controller;let fait=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!had||fait)return;fait=true;const go=()=>{if(drag||pinch)return setTimeout(go,300);try{saveNow()}catch(e){}location.reload()};go()})}}else window.__sw='indisponible ('+location.protocol+')';
 $('vue').onclick=()=>fit(true,!window.__vueTout?true:false);$('taille').value=taille;$('taille').oninput=e=>{taille=+e.target.value;localStorage.setItem('morceluneTaille',taille);const s0=cam.s,ns=slot().k*taille;zoomAt(W/2,(H-TRAYH())/2+34,ns/s0)};$('menuBtn').onclick=e=>{e.stopPropagation();$('menu').classList.toggle('open')};document.addEventListener('pointerdown',e=>{if(!$('menu').contains(e.target)&&e.target!==$('menuBtn'))$('menu').classList.remove('open')});
 $('menu').addEventListener('click',e=>{if(e.target.closest('.mi'))$('menu').classList.remove('open')});$('regles').onclick=()=>$('rules').style.display='flex';
 $('optRot').checked=rotOn;$('optRot').onchange=e=>{rotOn=e.target.checked;localStorage.setItem('puzzleRot',rotOn?'1':'0');toast(rotOn?'Rotation activée pour la prochaine partie':'Rotation désactivée pour la prochaine partie')};initFonds();majEclats();$('go2').onclick=()=>{$('go').onclick();campagne()};$('go').onclick=()=>{$('rules').style.display='none';localStorage.setItem('puzzleRegles','1')};
-function resize(){document.getElementById('info').style.bottom=(innerWidth<600?112:126)+'px';$('plateau').style.bottom=(innerWidth<600?112:126)+'px';DPR=Math.min(window.devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';dirty=true}
+function resize(){document.getElementById('info').style.bottom=(innerWidth<600?112:126)+'px';$('plateau').style.bottom=(innerWidth<600?112:126)+'px';DPR=Math.min(window.devicePixelRatio||1,3);W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';dirty=true}
 addEventListener('resize',resize);resize();
 // ---------- démarrage / reprise ----------
 function boot(idbSt){let st=null;try{st=JSON.parse(localStorage.getItem('puzzleEtat'))}catch(e){}if(idbSt&&(idbSt.t||0)>+(localStorage.getItem('puzzleEtatSupp')||0)&&(!st||(st.t&&(idbSt.t||0)>st.t))){st=idbSt;window.__repriseIDB=true}
