@@ -513,20 +513,37 @@ function hues(){// couleur dominante de chaque pièce depuis une vignette C×R (
 // niveaux de détail : copies réduites (½, ¼) quand la pièce est affichée petite
 const lodM=new WeakMap();function lod(B,sc){let k=1;while(sc<.5/k&&k<4)k*=2;if(k==1)return B;let L=lodM.get(B);if(!L)lodM.set(B,L={});if(!L[k]){const [c,g]=mk(Math.max(1,Math.round(B.width/k)),Math.max(1,Math.round(B.height/k)));g.imageSmoothingQuality='high';g.drawImage(B,0,0,c.width,c.height);c.pad=B.pad;L[k]=c}return L[k]}
 const ens=p=>{if(!p.bmp)render(p);return p};
-// v17 : au zoom, les pièces VISIBLES sont redessinées depuis l'image à la résolution de l'écran (paliers 2, 3, 4 px par unité) au lieu d'agrandir
-// leur bitmap de base (1,5 px/unité) ou la couche des pièces posées (≈0,93 px/unité). Budget mémoire 24 Mpx (≈ 96 Mo), plus ancien libéré d'abord ;
-// au plus 6 rendus par image (le bitmap de base sert en attendant) ; tout est libéré au dézoom et au changement de niveau.
-const HI=new Map(),HIMAX=24e6;let hiPx=0,hiN=0,hiQ=0;
-function hiPalier(sd){if(sd<=LQ*1.08)return 0;return sd<=1.35?1.35:sd<=2.1?2:sd<=3.1?3:4}
-function hiClear(){HI.clear();hiPx=0}
+// v17 : au zoom, les pièces VISIBLES sont redessinées depuis l'image (palier 1,35 ou 2 px par unité — l'image n'a qu'≈ 1 px par unité, au-delà rien à gagner)
+// au lieu d'agrandir la couche des pièces posées (≈0,93 px/unité). Les pièces posées vont dans un seul calque net (≤ 12 Mpx, voir hlPrep) ;
+// les pièces libres gardent un cache (24 Mpx ≈ 96 Mo, plus ancien libéré d'abord) ;
+// rendus limités à ≈ 6 ms par image (le bitmap de base sert en attendant) ; tout est libéré au dézoom et au changement de niveau.
+const HI=new Map(),HIMAX=24e6;let hiPx=0,hiN=0,hiQ=0,hiT0=0,HL=null,lockStamp=0,camCK='',hqT;
+function hiPalier(sd,a){if(sd<=LQ*1.08)return 0;let q=sd>1.35?2:1.35;if(a*q*q>12e6)q=1.35;return a*q*q>12e6?0:q}
+function hiClear(){HI.clear();hiPx=0;HL=null}
 function hiB(p){if(!hiQ||!p.bmp||(!p.inL&&hiQ<=Math.min(DPR,1.5)*1.15))return null;let e=HI.get(p);if(e&&e.q===hiQ&&e.src===p.bmp){e.t=performance.now();return e.c}
- if(hiN>=6){dirty=true;return e&&e.src===p.bmp?e.c:null}hiN++;const c=render(p,hiQ);if(e)hiPx-=e.c.width*e.c.height;HI.set(p,{q:hiQ,src:p.bmp,c,t:performance.now()});hiPx+=c.width*c.height;
+ if(hiN>=1&&performance.now()-hiT0>6){dirty=true;return e&&e.src===p.bmp?e.c:null}hiN++;const c=render(p,hiQ);if(e)hiPx-=e.c.width*e.c.height;HI.set(p,{q:hiQ,src:p.bmp,c,t:performance.now()});hiPx+=c.width*c.height;
  if(hiPx>HIMAX){const l=[...HI.entries()].sort((a,b)=>a[1].t-b[1].t);for(const [k,v] of l){if(hiPx<=HIMAX*.8)break;if(k===p)continue;HI.delete(k);hiPx-=v.c.width*v.c.height}}return c}
 // pré-rendu par tranches (≈ 6 ms) pendant les temps morts, bandeau d'abord
 let warmT;function warm(){clearTimeout(warmT);let i=0;const list=tray.map(g=>g.pcs[0]).concat(P);const step=()=>{const t=performance.now();while(i<list.length&&performance.now()-t<6)ens(list[i++]);if(i<list.length)warmT=setTimeout(step,(drag||pinch||zt||vel||camGo)?120:0)};warmT=setTimeout(step,30)}
 // calque figé : pièces posées dessinées une fois dans un canevas à l'échelle du monde
 let lockL=null,lockG=null,lockDirty=true,LQ=1;
-function rebuildLock(){LQ=Math.min(1,8000/Math.max(IW,IH),Math.sqrt(12e6/(IW*IH)));if(!lockL||lockL.width!==Math.ceil(IW*LQ)||lockL.height!==Math.ceil(IH*LQ)){[lockL,lockG]=mk(Math.ceil(IW*LQ),Math.ceil(IH*LQ))}else lockG.clearRect(0,0,lockL.width,lockL.height);
+// v17 : calque net des pièces posées autour de la vue (palier hiQ px/unité), rempli d'un coup (union des contours des pièces posées, l'image dessinée une fois) puis affiché en UNE fois
+// à la place de la couche figée dès que toutes les pièces posées visibles y sont (avant : couche figée dessous) : sur un téléphone, des dizaines de petits dessins par image coûtaient trop cher. Refait si la vue sort de la zone,
+// si le palier change ou si la couche figée est reconstruite. Taille ≤ 10 Mpx (≈ 40 Mo).
+function hlPrep(vx0,vy0,vx1,vy1){if(!hiQ){HL=null;return false}
+ if(!HL||HL.want!==hiQ||HL.stamp!==lockStamp||(HL.q<hiQ&&(vx1-vx0)*(vy1-vy0)*2.25*hiQ*hiQ<=10e6)||vx0<HL.x0||vy0<HL.y0||vx1>HL.x1||vy1>HL.y1){const w=vx1-vx0,h=vy1-vy0;let k=null;
+  // marge autour de la vue pour pouvoir glisser sans refaire le calque ; palier réduit à 1,35 plutôt que marge nulle
+  for(const [q,m] of [[hiQ,.5],[hiQ,.25],[1.35,.5],[1.35,.25],[hiQ,.1],[1.35,.1]]){if(q>hiQ)continue;const x0=Math.max(-tab,vx0-w*m),y0=Math.max(-tab,vy0-h*m),x1=Math.min(IW+tab,vx1+w*m),y1=Math.min(IH+tab,vy1+h*m);if((x1-x0)*(y1-y0)*q*q<=10e6){k={q,x0,y0,x1,y1};break}}
+  if(!k){HL=null;return false}const [c,g]=mk(Math.ceil((k.x1-k.x0)*k.q),Math.ceil((k.y1-k.y0)*k.q));HL={c,g,...k,want:hiQ,done:new Set,stamp:lockStamp}}
+ const q=HL.q,U=new Path2D();let n=0;
+ for(const g of order){if(!g.lock||g.tray)continue;for(const p of g.pcs){if(!p.inL||p.st||HL.done.has(p))continue;const x=p.c*pw+g.dx-tab,y=p.r*ph+g.dy-tab;
+  if(x>HL.x1||y>HL.y1||x+p.bw<HL.x0||y+p.bh<HL.y0)continue;U.addPath(piecePath(p,-g.dx,-g.dy));HL.done.add(p);n++}}
+ if(n){// pièces posées = l'image elle-même découpée : une seule découpe (union des contours), un seul dessin, et le même bord dilaté que render()
+  const g=HL.g,kx=img.width/IW,ky=img.height/IH;g.save();g.setTransform(q,0,0,q,-HL.x0*q,-HL.y0*q);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+  g.save();g.clip(U);g.drawImage(img,0,0,IW,IH);g.restore();const pat=g.createPattern(img,'no-repeat');pat.setTransform(new DOMMatrix([1/kx,0,0,1/ky,0,0]));
+  g.strokeStyle=pat;g.lineWidth=Math.max(2.5,Math.min(pw,ph)*.035);g.lineJoin='round';g.stroke(U);g.restore()}
+ return true}
+function rebuildLock(){lockStamp++;LQ=Math.min(1,8000/Math.max(IW,IH),Math.sqrt(12e6/(IW*IH)));if(!lockL||lockL.width!==Math.ceil(IW*LQ)||lockL.height!==Math.ceil(IH*LQ)){[lockL,lockG]=mk(Math.ceil(IW*LQ),Math.ceil(IH*LQ))}else lockG.clearRect(0,0,lockL.width,lockL.height);
  P.forEach(p=>{p.inL=false;if(p.g&&p.g.lock&&!p.pend)commit(p)});lockDirty=false}
 function commit(p){ens(p);lockG.drawImage(p.bmp,(p.c*pw-tab)*LQ,(p.r*ph-tab)*LQ,p.bw*LQ,p.bh*LQ);p.inL=true;p.pend=false}
 function start(){t0=performance.now()-elapsed*1000;running=true;$('bravo').style.display='none'}
@@ -563,10 +580,10 @@ function draw(){frames++;if(physics())dirty=true;const now=performance.now();if(
  ctx.setTransform(DPR,0,0,DPR,0,0);{const k=fond+'|'+W+'|'+H+'|'+DPR;if(k!==bgCK){bgCK=k;let g;[bgC,g]=mk(Math.ceil(W*DPR),Math.ceil(H*DPR));g.scale(DPR,DPR);g.fillStyle=bgFill();g.fillRect(0,0,W,H);if(window.texture)texture(g)}ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(bgC,0,0)}ctx.setTransform(DPR*cam.s,0,0,DPR*cam.s,-cam.x*cam.s*DPR,-cam.y*cam.s*DPR);
  ctx.fillStyle='rgba(255,255,255,.07)';ctx.fillRect(0,0,IW,IH);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2/cam.s;ctx.strokeRect(0,0,IW,IH);
  const vx0=cam.x-tab*2,vy0=cam.y-tab*2,vx1=cam.x+W/cam.s+tab,vy1=cam.y+H/cam.s+tab;
- const m0=Math.min(pw,ph),sd=cam.s*DPR;hiQ=hiPalier(sd);hiN=0;if(!hiQ&&HI.size)hiClear();ctx.imageSmoothingQuality=hiQ?'high':'low';
+ const m0=Math.min(pw,ph),sd=cam.s*DPR;hiQ=hiPalier(sd,(vx1-vx0)*(vy1-vy0));hiN=0;hiT0=performance.now();if(!hiQ&&HI.size)hiClear();{const ck=cam.x+','+cam.y+','+cam.s,mv=ck!==camCK||!!drag;camCK=ck;if(mv&&hiQ){clearTimeout(hqT);hqT=setTimeout(()=>{dirty=true},150)}ctx.imageSmoothingQuality=hiQ&&!mv?'high':'low'}// lissage fin seulement à l'arrêt (moitié moins cher pendant les gestes)
  const now2=performance.now(),drawP=(p,sh)=>{ens(p);let x=p.c*pw+(p.g.dx)-tab,y=p.r*ph+p.g.dy-tab;if(p.st){const f=1-(now2-p.st)/160;if(f<=0)p.st=0;else{const e=f*f*f;x+=p.sx*e;y+=p.sy*e;dirty=true}}if(x>vx1||y>vy1||x+p.bw<vx0||y+p.bh<vy0)return;const B0=sh?shade(p,sh.gold):(hiB(p)||p.bmp),B=sh?lod(B0,p.bw*sd/p.bmp.width):B0===p.bmp?lod(B0,p.bw*sd/p.bmp.width):B0,pd=sh?B.pad:0,ox=sh?sh.off:0;if(sh)ctx.globalAlpha=sh.alpha;if(p.rot){ctx.save();ctx.translate(x+p.bw/2+ox,y+p.bh/2+ox);ctx.rotate(p.rot*Math.PI/2);ctx.drawImage(B,-p.bw/2-pd,-p.bh/2-pd,p.bw+pd*2,p.bh+pd*2);ctx.restore()}else ctx.drawImage(B,x-pd+ox,y-pd+ox,p.bw+pd*2,p.bh+pd*2);if(sh)ctx.globalAlpha=1};
- if(lockDirty)rebuildLock();if(lockL.width>1&&lockL.height>1)ctx.drawImage(lockL,0,0,IW,IH);
- if(hiQ)for(const g of order){if(!g.lock||g.tray)continue;for(const p of g.pcs)if(p.inL&&!p.st)drawP(p)}
+ if(lockDirty)rebuildLock();const hlOk=hlPrep(vx0,vy0,vx1,vy1);if(lockL.width>1&&lockL.height>1&&!hlOk)ctx.drawImage(lockL,0,0,IW,IH);
+ if(HL&&HL.done.size)ctx.drawImage(HL.c,HL.x0,HL.y0,HL.c.width/HL.q,HL.c.height/HL.q);
  for(const g of order){if(g.tray)continue;if(edgesOnly&&!g.lock&&g.pcs.length==1&&!g.pcs[0].edge)continue;const hl=g===sel,fl=flash&&flash.g===g&&now2<flash.until,dg=drag&&drag.g===g&&!g.tray&&(drag.moved||drag.mode=='out');
   if(!g.lock){const sh=hl||fl?{gold:1,alpha:hl?.95:.8,off:0}:{alpha:dg?.55:.42,off:m0*(dg?.09:.03)};for(const p of g.pcs)drawP(p,sh);if(dg){for(const p of g.pcs)drawP(p,{alpha:.25,off:m0*.02})}for(const p of g.pcs)drawP(p)}
   else{for(const p of g.pcs){if(p.inL)continue;if(fl)drawP(p,{gold:1,alpha:Math.max(0,(flash.until-now2)/500),off:0});drawP(p);if(!p.st&&!fl&&p.g.lock){commit(p);dirty=true}}}}
